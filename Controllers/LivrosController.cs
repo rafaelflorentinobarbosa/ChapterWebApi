@@ -59,8 +59,17 @@ namespace Chapter.WebApi.Controllers
         [HttpDelete("{id}")] // o id passado no delete /api/livros/1 
         public IActionResult Deletar(int id)
         {
-            _livroRepository.Deletar(id);
-            return StatusCode(204);
+            try
+            {
+                _livroRepository.Deletar(id);
+                return StatusCode(204);
+            }
+            catch (System.Exception)
+            {
+
+                return BadRequest();
+            }
+
         }
 
     }

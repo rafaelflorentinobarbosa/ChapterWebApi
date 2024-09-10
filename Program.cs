@@ -1,69 +1,78 @@
 using Chapter.WebApi.Contexts;
 using Chapter.WebApi.Repositories;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Adiciona serviços ao contêiner.
+// Adiciona o contexto do banco de dados
 builder.Services.AddScoped<ChapterContext, ChapterContext>();
-builder.Services.AddControllers();
-builder.Services.AddTransient<LivroRepository, LivroRepository>();
 
-// Configura o Swagger/OpenAPI
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Adiciona os controladores
+builder.Services.AddControllers();
+
+// Configura o Swagger
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "ChapterApi",
+        Version = "v1"
+    });
+});
+
+// Configura a autenticação JWT
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = "JwtBearer";
+    options.DefaultChallengeScheme = "JwtBearer";
+})
+.AddJwtBearer("JwtBearer", options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes("chapterapi-chaveautenticacao")),
+        ClockSkew = TimeSpan.FromMinutes(30),
+        ValidIssuer = "chapterapi.webapi",
+        ValidAudience = "chapterapi.webapi"
+    };
+});
+
+// Adiciona os repositórios
+builder.Services.AddTransient<LivroRepository, LivroRepository>();
+builder.Services.AddTransient<UsuarioRepository, UsuarioRepository>();
 
 var app = builder.Build();
 
-// Configura o pipeline de solicitação HTTP.
+// Configura o middleware de desenvolvimento
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-else
-{
-    app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
 }
 
+// Ativa o middleware para uso do Swagger
+app.UseSwagger();
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ChapterApi v1"));
+
+// Configura o middleware para redirecionamento HTTPS e arquivos estáticos
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
+// Configura o roteamento
 app.UseRouting();
 
+// Habilita a autenticação e autorização
+app.UseAuthentication();
 app.UseAuthorization();
 
-// Mapeia os controladores.
+// Registra os endpoints usando rotas em nível superior
 app.MapControllers();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
 app.Run();
-
-#pragma warning disable CS8632
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
-
-#pragma warning restore CS8632
